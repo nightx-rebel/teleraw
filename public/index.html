@@ -1,0 +1,304 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Raw Inspector Bot</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --paper: #f2f4f7;
+    --panel: #ffffff;
+    --ink: #17202b;
+    --muted: #5d6b7c;
+    --line: #d9dfe7;
+    --accent: #1d7fc4;
+    --key: #1d6fa8;
+    --str: #2d7a55;
+    --num: #a8620a;
+    --bool: #8a4fb0;
+    --good: #2d7a55;
+    --warn: #a8620a;
+    --bad: #b23a3a;
+    --sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #11171f;
+      --panel: #19212b;
+      --ink: #e6ebf1;
+      --muted: #93a1b2;
+      --line: #2a3441;
+      --accent: #4aa8e6;
+      --key: #6cb6ea;
+      --str: #7fcf9f;
+      --num: #e2a45c;
+      --bool: #c79be6;
+      --good: #7fcf9f;
+      --warn: #e2a45c;
+      --bad: #ec8a8a;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font: 16px/1.55 var(--sans);
+  }
+  main { max-width: 680px; margin: 0 auto; padding: 40px 20px 64px; }
+
+  .state { display: flex; align-items: center; gap: 8px; margin: 0 0 14px; color: var(--muted); font-size: 15px; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); flex: none; }
+  .state[data-s="good"] { color: var(--good); } .state[data-s="good"] .dot { background: var(--good); }
+  .state[data-s="warn"] { color: var(--warn); } .state[data-s="warn"] .dot { background: var(--warn); }
+  .state[data-s="bad"]  { color: var(--bad); }  .state[data-s="bad"] .dot  { background: var(--bad); }
+
+  h1 { margin: 0 0 8px; font-size: clamp(30px, 8vw, 44px); line-height: 1.1; font-weight: 600; letter-spacing: -0.02em; overflow-wrap: anywhere; }
+  .lede { margin: 0 0 28px; color: var(--muted); max-width: 52ch; }
+
+  pre#json {
+    margin: 0 0 32px;
+    padding: 18px 20px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-left: 4px solid var(--accent);
+    border-radius: 8px;
+    font: 14px/1.6 var(--mono);
+    overflow-x: auto;
+    white-space: pre;
+  }
+  .k { color: var(--key); } .s { color: var(--str); } .n { color: var(--num); } .b { color: var(--bool); }
+
+  .notice {
+    margin: 0 0 32px; padding: 14px 16px;
+    border: 1px solid var(--warn); border-radius: 8px; background: var(--panel);
+  }
+  .notice p { margin: 0 0 6px; }
+  .notice code { font: 14px var(--mono); overflow-wrap: anywhere; }
+
+  section { margin: 0 0 32px; }
+  h2 { margin: 0 0 10px; font-size: 18px; font-weight: 600; }
+  .row { display: flex; justify-content: space-between; gap: 16px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+  .row .l { color: var(--muted); }
+  .row .r { text-align: right; overflow-wrap: anywhere; }
+  .row .r.mono { font-family: var(--mono); font-size: 14px; }
+  .r.good { color: var(--good); } .r.warn { color: var(--warn); } .r.bad { color: var(--bad); }
+
+  .bars { list-style: none; margin: 0; padding: 0; }
+  .bars li { display: grid; grid-template-columns: 9.5rem 1fr 3.5rem; align-items: center; gap: 10px; padding: 5px 0; font-size: 15px; }
+  .bars .name { font-family: var(--mono); font-size: 14px; overflow: hidden; text-overflow: ellipsis; }
+  .bars .track { height: 8px; background: var(--line); border-radius: 4px; overflow: hidden; }
+  .bars .fill { height: 100%; background: var(--accent); }
+  .bars .num { text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .empty { color: var(--muted); margin: 0; }
+
+  .cmds { list-style: none; margin: 0; padding: 0; }
+  .cmds li { display: flex; gap: 14px; padding: 6px 0; border-bottom: 1px solid var(--line); }
+  .cmds code { font: 14px var(--mono); color: var(--accent); min-width: 6.5rem; }
+  .cmds span { color: var(--muted); }
+
+  footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--muted); font-size: 14px; }
+  button {
+    font: inherit; font-size: 14px; color: var(--ink); background: var(--panel);
+    border: 1px solid var(--line); border-radius: 6px; padding: 8px 14px; cursor: pointer;
+  }
+  button:hover { border-color: var(--accent); }
+  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  @media (max-width: 480px) { .bars li { grid-template-columns: 7rem 1fr 3rem; } }
+</style>
+</head>
+<body>
+<main>
+  <p class="state" id="state" data-s="">
+    <i class="dot"></i><span id="stateText">Checking status…</span>
+  </p>
+  <h1 id="title">Raw Inspector Bot</h1>
+  <p class="lede">Send any message to this bot on Telegram and it replies with the raw JSON Telegram delivered.</p>
+
+  <pre id="json" aria-label="Live status as JSON">Loading…</pre>
+
+  <div class="notice" id="notice" hidden></div>
+
+  <section id="webhook"><h2>Webhook</h2><div class="rows"></div></section>
+  <section id="redis"><h2>Redis</h2><div class="rows"></div></section>
+  <section id="updates"><h2>Updates received</h2><div></div></section>
+  <section id="commands"><h2>Commands</h2><ul class="cmds"></ul></section>
+
+  <footer>
+    <span id="time"></span>
+    <button id="refresh" type="button">Refresh</button>
+  </footer>
+</main>
+
+<script>
+const $ = (s) => document.querySelector(s);
+
+function el(tag, cls, text) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text !== undefined) e.textContent = text;
+  return e;
+}
+
+function row(label, value, cls) {
+  const r = el('div', 'row');
+  r.append(el('span', 'l', label), el('span', 'r ' + (cls || ''), value));
+  return r;
+}
+
+// pretty-print an object as coloured JSON, using text nodes only
+function jsonNodes(v, depth = 0) {
+  const pad = '  '.repeat(depth);
+  const t = (text, cls) => { const s = document.createElement('span'); if (cls) s.className = cls; s.textContent = text; return s; };
+  if (v && typeof v === 'object') {
+    const entries = Object.entries(v);
+    if (!entries.length) return [t('{}')];
+    const out = [t('{\n')];
+    entries.forEach(([k, val], i) => {
+      out.push(t(pad + '  '), t(JSON.stringify(k), 'k'), t(': '), ...jsonNodes(val, depth + 1), t(i < entries.length - 1 ? ',\n' : '\n'));
+    });
+    out.push(t(pad + '}'));
+    return out;
+  }
+  if (typeof v === 'string') return [t(JSON.stringify(v), 's')];
+  if (typeof v === 'number') return [t(String(v), 'n')];
+  return [t(String(v), 'b')];
+}
+
+function setState(kind, text) {
+  $('#state').dataset.s = kind;
+  $('#stateText').textContent = text;
+}
+
+function fmtDate(iso) {
+  return iso ? new Date(iso).toLocaleString() : 'n/a';
+}
+
+function render(d) {
+  const bot = d.bot;
+  const wh = d.webhook;
+
+  // headline
+  $('#title').textContent = bot ? '@' + bot.username : 'Raw Inspector Bot';
+  if (bot) document.title = '@' + bot.username + ' · Raw Inspector';
+
+  // overall state
+  if (!d.env.botToken) setState('bad', 'BOT_TOKEN is missing');
+  else if (!bot) setState('bad', 'Telegram rejected the bot token');
+  else if (!wh || !wh.ok) setState('warn', 'Webhook not connected to this domain');
+  else if (!d.redis.ok) setState('warn', 'Redis is not reachable');
+  else setState('good', 'Online');
+
+  // live JSON hero
+  const summary = {
+    bot: bot ? '@' + bot.username : null,
+    webhook: wh ? (wh.ok ? 'connected' : 'not connected') : 'unknown',
+    pending_updates: wh ? wh.pending : null,
+    redis: d.redis.ok ? { ok: true, latency_ms: d.redis.latencyMs } : { ok: false },
+    updates_total: d.stats ? d.stats.total : 0,
+    users_with_settings: d.stats ? d.stats.settingsUsers : 0,
+  };
+  const pre = $('#json');
+  pre.replaceChildren(...jsonNodes(summary));
+
+  // setup notice
+  const notice = $('#notice');
+  notice.replaceChildren();
+  if (d.env.botToken && bot && (!wh || !wh.ok)) {
+    notice.hidden = false;
+    notice.append(
+      el('p', '', 'Connect the bot to this domain by opening this link once:'),
+      el('code', '', location.origin + '/api/setup?key=YOUR_SETUP_KEY')
+    );
+  } else if (!d.env.redis) {
+    notice.hidden = false;
+    notice.append(el('p', '', 'Redis is not configured. Add UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN in Vercel, then redeploy.'));
+  } else {
+    notice.hidden = true;
+  }
+
+  // webhook rows
+  const whBox = $('#webhook .rows');
+  whBox.replaceChildren();
+  if (wh) {
+    whBox.append(
+      row('Status', wh.ok ? 'Connected' : 'Not connected', wh.ok ? 'good' : 'warn'),
+      row('Endpoint', wh.url || 'not set', 'mono'),
+      row('Waiting to deliver', String(wh.pending))
+    );
+    if (wh.lastError) whBox.append(row('Last error', wh.lastError, 'bad'), row('Error time', fmtDate(wh.lastErrorDate)));
+  } else {
+    whBox.append(row('Status', d.botError || 'Unavailable', 'bad'));
+  }
+  whBox.append(row('Access', d.env.restricted ? 'Only allowed users' : 'Everyone'));
+
+  // redis rows
+  const rBox = $('#redis .rows');
+  rBox.replaceChildren();
+  if (d.redis.ok) {
+    rBox.append(
+      row('Connection', 'OK, ' + d.redis.latencyMs + ' ms', 'good'),
+      row('Users with saved settings', String(d.stats.settingsUsers)),
+      row('Updates kept for /history', String(d.stats.historySize)),
+      row('Counting since', d.stats.since ? new Date(d.stats.since).toLocaleDateString() : 'n/a')
+    );
+  } else {
+    rBox.append(row('Connection', d.redis.error || 'Not configured', 'bad'));
+  }
+
+  // updates by type
+  const uBox = $('#updates div');
+  uBox.replaceChildren();
+  const counts = d.stats ? Object.entries(d.stats.counts).sort((a, b) => b[1] - a[1]) : [];
+  if (!counts.length) {
+    uBox.append(el('p', 'empty', 'No updates yet. Send a message to the bot on Telegram.'));
+  } else {
+    const max = Math.max(...counts.map(([, v]) => Number(v)));
+    const ul = el('ul', 'bars');
+    for (const [name, v] of counts) {
+      const li = el('li');
+      const track = el('span', 'track');
+      const fill = el('span', 'fill');
+      fill.style.width = Math.max(3, (Number(v) / max) * 100) + '%';
+      track.append(fill);
+      li.append(el('span', 'name', name), track, el('span', 'num', String(v)));
+      ul.append(li);
+    }
+    uBox.append(ul);
+  }
+
+  // commands
+  const cBox = $('#commands .cmds');
+  cBox.replaceChildren();
+  for (const c of d.commands) {
+    const li = el('li');
+    li.append(el('code', '', '/' + c.command), el('span', '', c.description));
+    cBox.append(li);
+  }
+
+  $('#time').textContent = 'Updated ' + new Date(d.time).toLocaleTimeString();
+}
+
+async function load() {
+  $('#refresh').disabled = true;
+  try {
+    const res = await fetch('/api/status', { cache: 'no-store' });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    render(await res.json());
+  } catch (e) {
+    setState('bad', 'Could not load status (' + e.message + ')');
+  } finally {
+    $('#refresh').disabled = false;
+  }
+}
+
+$('#refresh').addEventListener('click', load);
+load();
+</script>
+</body>
+</html>
